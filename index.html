@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>段考儀表板</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --bg2: #1e293b;
+    --card: #ffffff;
+    --muted: #64748b;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --success: #16a34a;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+    background: linear-gradient(180deg, #0f172a 0%, #1e3a8a 45%, #f1f5f9 45%);
+    min-height: 100vh;
+    color: #0f172a;
+  }
+  /* 頂部時間列 */
+  .top-clock {
+    background: rgba(15,23,42,.95);
+    color: #fff;
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,.1);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .top-clock-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 20px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .clock-left { display: flex; align-items: center; gap: 18px; }
+  .live-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 8px rgba(34,197,94,.2);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 3px rgba(34,197,94,.35); } }
+  .clock-label { font-size: 15px; color: #94a3b8; letter-spacing: .2em; font-weight: 700; }
+  .clock-time { font-size: clamp(48px, 9vw, 76px); font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.05; letter-spacing: .02em; text-shadow: 0 2px 18px rgba(37,99,235,.55); }
+  .clock-date { font-size: 19px; color: #e2e8f0; margin-top: 6px; font-weight: 600; }
+  .clock-right { text-align: right; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px;
+    font-weight: 700; font-size: 15px;
+    background: #1e293b; border: 1px solid rgba(255,255,255,.15);
+  }
+  .status-pill.exam { background: #dc2626; border-color: #fca5a5; }
+  .status-pill.break { background: #059669; border-color: #6ee7b7; }
+
+  .container { max-width: 860px; margin: 0 auto; padding: 20px 20px 48px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 10px 30px rgba(15,23,42,.12);
+    padding: 18px;
+    border: 1px solid #e2e8f0;
+  }
+  .card h2 { margin: 0 0 6px; font-size: 24px; }
+  .card p.desc { margin: 0 0 16px; color: var(--muted); font-size: 16px; }
+
+  /* 日期 + 考程設定 */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar label { font-size: 17px; color: var(--muted); display:flex; align-items:center; gap:8px; font-weight: 600; }
+  input[type="date"], input[type="text"] {
+    border: 2px solid #cbd5e1; border-radius: 12px;
+    padding: 12px 14px; font-size: 20px; font-family: inherit;
+    background: #fff; color: #0f172a;
+  }
+  input:focus { outline: 3px solid #bfdbfe; border-color: var(--primary); }
+  input[type="text"].subject { width: 100%; font-weight: 700; min-width: 180px; }
+  input.session { width: 130px; text-align: center; font-weight: 800; }
+  input.tinput {
+    width: 96px; text-align: center; font-weight: 800;
+    font-variant-numeric: tabular-nums; letter-spacing: .03em;
+  }
+  input.invalid { border-color: var(--danger); background: #fef2f2; }
+
+  table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border-radius: 12px; border: 1px solid #e2e8f0; }
+  thead th { background: #f1f5f9; font-size: 17px; color: #475569; padding: 14px 10px; letter-spacing: .08em; white-space: nowrap; }
+  tbody td { padding: 12px 10px; border-top: 1px solid #e2e8f0; vertical-align: middle; font-size: 18px; }
+  tbody tr.current { background: #fef2f2; }
+  tbody tr.next { background: #f0fdf4; }
+  tbody tr.done { opacity: .55; }
+
+  .row-actions { display: flex; gap: 6px; justify-content: center; }
+  .btn {
+    border: 0; border-radius: 10px; padding: 9px 14px;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: transform .05s, background .15s;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-ghost { background: #f1f5f9; color: #334155; }
+  .btn-ghost:hover { background: #e2e8f0; }
+  .btn-danger { background: #fee2e2; color: #b91c1c; }
+  .btn-danger:hover { background: #fecaca; }
+  .btn-small { padding: 10px 14px; font-size: 17px; border-radius: 10px; }
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+  .hint { font-size: 13px; color: #64748b; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 10px; padding: 10px 12px; margin-top: 12px; line-height: 1.6; }
+  .footer { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 18px; }
+
+  /* 全螢幕大字報 */
+  .board {
+    display: none;
+    position: fixed; inset: 0; z-index: 100;
+    background: #0b1226;
+    color: #fff;
+    padding: clamp(16px, 3vh, 40px) clamp(16px, 4vw, 56px);
+    overflow-y: auto;
+  }
+  .board.open { display: flex; flex-direction: column; }
+  .board-top {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+    border-bottom: 2px solid rgba(255,255,255,.15);
+    padding-bottom: 12px; margin-bottom: 12px;
+  }
+  .board-clock { font-size: clamp(48px, 10vw, 120px); font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; }
+  .board-date { font-size: clamp(18px, 3vw, 34px); color: #94a3b8; font-weight: 700; margin-top: 6px; }
+  .board-status { font-size: clamp(22px, 3.6vw, 44px); font-weight: 900; }
+  .board-status.exam { color: #f87171; }
+  .board-status.break { color: #34d399; }
+  .board-close {
+    position: absolute; top: 12px; right: 16px;
+    background: rgba(255,255,255,.12); color: #fff; border: 0;
+    font-size: 22px; font-weight: 800; border-radius: 12px;
+    padding: 10px 18px; cursor: pointer;
+  }
+  .board-close:hover { background: rgba(255,255,255,.25); }
+  .board-rows { display: flex; flex-direction: column; gap: clamp(8px, 1.6vh, 18px); }
+  .board-row {
+    display: grid; grid-template-columns: 1.1fr 1.6fr 1.4fr auto;
+    align-items: center; gap: 12px;
+    background: rgba(255,255,255,.06);
+    border: 2px solid rgba(255,255,255,.12);
+    border-radius: 18px;
+    padding: clamp(10px, 2vh, 22px) clamp(14px, 2.5vw, 32px);
+  }
+  .board-row .b-session { font-size: clamp(24px, 4vw, 54px); font-weight: 800; color: #bfdbfe; }
+  .board-row .b-time { font-size: clamp(26px, 4.4vw, 60px); font-weight: 900; font-variant-numeric: tabular-nums; }
+  .board-row .b-subject { font-size: clamp(30px, 5.4vw, 76px); font-weight: 900; }
+  .board-row .b-tag { font-size: clamp(18px, 2.8vw, 36px); font-weight: 900; padding: 8px 20px; border-radius: 999px; white-space: nowrap; }
+  .board-row.now { background: rgba(220,38,38,.28); border-color: #f87171; box-shadow: 0 0 40px rgba(220,38,38,.35); }
+  .board-row.now .b-tag { background: #dc2626; color: #fff; }
+  .board-row.next { background: rgba(22,163,74,.22); border-color: #34d399; }
+  .board-row.next .b-tag { background: #16a34a; color: #fff; }
+  .board-row.done { opacity: .35; }
+  .board-row.done .b-tag { background: rgba(255,255,255,.15); color: #94a3b8; }
+  .board-row.wait .b-tag { background: rgba(255,255,255,.12); color: #cbd5e1; }
+  .board-empty { font-size: clamp(24px, 4vw, 48px); color: #94a3b8; text-align: center; padding: 60px 0; }
+  @media print { .btn-row, .row-actions, .hint.no-print { display: none; } body { background: #fff; } }
+</style>
+</head>
+<body>
+
+<!-- 最上方：目前時間 -->
+<header class="top-clock">
+  <div class="top-clock-inner">
+    <div class="clock-left">
+      <div class="live-dot"></div>
+      <div>
+        <div class="clock-label">目前時間 NOW</div>
+        <div class="clock-time" id="clockTime">--:--:--</div>
+        <div class="clock-date" id="clockDate">載入中…</div>
+      </div>
+    </div>
+    <div class="clock-right">
+      <div class="status-pill" id="statusPill">⏳ 準備中</div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="grid">
+    <!-- 可編輯考程 -->
+    <section class="card">
+      <h2>✏️ 考試節次設定（可編輯）</h2>
+      <p class="desc">直接在表格修改節次、時間、科目，會自動儲存。時間為 24 小時制（如 13:30），可打 1330 自動轉換。支援新增 / 刪除 / 上移 / 下移。</p>
+      <div class="toolbar">
+        <label>考試日期 <input type="date" id="examDate" /></label>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>節次</th>
+            <th>開始</th>
+            <th>結束</th>
+            <th>科目</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="addBtn">＋ 新增一節</button>
+        <button class="btn btn-ghost" id="boardBtn">⛶ 全螢幕顯示</button>
+        <button class="btn btn-ghost" id="resetBtn">↺ 恢復範例</button>
+        <button class="btn btn-danger" id="clearBtn">🗑 全部清除</button>
+      </div>
+      <div class="hint no-print">
+        💡 使用方式：點表格內的文字或時間即可編輯。
+        所有變更會即時儲存到瀏覽器（localStorage），重新整理不會消失。<br/>
+        若要投影到大螢幕，可用瀏覽器全螢幕（F11）+ 列印另存 PDF。
+      </div>
+    </section>
+  </div>
+  <div class="footer">段考儀表板 · 單一 HTML 檔 · 時間每秒自動更新</div>
+</div>
+
+<!-- 全螢幕大字報 -->
+<div class="board" id="board">
+  <button class="board-close" id="boardClose">✕ 離開（Esc）</button>
+  <div class="board-top">
+    <div>
+      <div class="board-clock" id="boardClock">--:--:--</div>
+      <div class="board-date" id="boardDate">—</div>
+    </div>
+    <div style="text-align:right">
+      <div class="board-status" id="boardStatus">⏳ 準備中</div>
+    </div>
+  </div>
+  <div class="board-rows" id="boardRows"></div>
+</div>
+
+<script>
+const LS_KEY = "exam-dashboard-v1";
+const $ = (id) => document.getElementById(id);
+const tbody = $("tbody");
+
+const DEFAULT_DATA = {
+  date: new Date().toISOString().slice(0, 10),
+  rows: [
+    { session: "第一節", start: "08:30", end: "09:20", subject: "國文" },
+    { session: "第二節", start: "09:40", end: "10:30", subject: "數學" },
+    { session: "第三節", start: "10:50", end: "11:40", subject: "英文" },
+    { session: "第四節", start: "13:30", end: "14:20", subject: "自然" },
+    { session: "第五節", start: "14:40", end: "15:30", subject: "社會" },
+  ]
+};
+
+let state = load();
+let lastTableSig = ""; // 表格上次渲染的簽名，避免每秒重繪打斷編輯
+
+function load() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (d && Array.isArray(d.rows)) return d;
+    }
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_DATA));
+}
+function save() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+function toMin(t) {
+  const v = normTime(t);
+  if (v == null) return null;
+  const [h, m] = v.split(":").map(Number);
+  return h * 60 + m;
+}
+// 將各種輸入正規化為 24 小時制 "HH:MM"，不合法回傳 null
+// 接受 "8:30"、"08:30"、"830"、"0830"、全形冒號
+function normTime(t) {
+  if (t == null) return null;
+  let v = String(t).trim().replace(/：/g, ":").replace(/\./g, ":").replace(/\s+/g, "");
+  if (v === "") return null;
+  let m = v.match(/^(\d{1,2}):?(\d{2})$/);
+  if (!m) {
+    const d = v.replace(/\D/g, "");
+    if (/^\d{3,4}$/.test(d)) m = [null, d.slice(0, -2), d.slice(-2)];
+    else return null;
+  }
+  const h = +m[1], mi = +m[2];
+  if (h > 23 || mi > 59) return null;
+  return String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0");
+}
+
+// ---------- 渲染可編輯表格 ----------
+function renderTable(statusMap) {
+  tbody.innerHTML = "";
+  state.rows.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    const st = statusMap ? statusMap[i] : "wait";
+    if (st === "now") tr.className = "current";
+    else if (st === "next") tr.className = "next";
+    else if (st === "done") tr.className = "done";
+
+    tr.innerHTML = `
+      <td><input class="session" data-i="${i}" data-k="session" value="${escapeHtml(r.session)}" placeholder="節次" /></td>
+      <td><input class="tinput" data-i="${i}" data-k="start" value="${r.start || ""}" placeholder="08:30" inputmode="numeric" maxlength="5" title="24小時制，例如 13:30" /></td>
+      <td><input class="tinput" data-i="${i}" data-k="end" value="${r.end || ""}" placeholder="09:20" inputmode="numeric" maxlength="5" title="24小時制，例如 14:20" /></td>
+      <td><input class="subject" data-i="${i}" data-k="subject" value="${escapeHtml(r.subject)}" placeholder="輸入科目" /></td>
+      <td><div class="row-actions">
+        <button class="btn btn-ghost btn-small" data-act="up" data-i="${i}" title="上移">▲</button>
+        <button class="btn btn-ghost btn-small" data-act="down" data-i="${i}" title="下移">▼</button>
+        <button class="btn btn-danger btn-small" data-act="del" data-i="${i}" title="刪除">✕</button>
+      </div></td>`;
+    tbody.appendChild(tr);
+  });
+
+  // 綁定編輯
+  tbody.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("focus", () => { inp.dataset.prev = inp.value; });
+    inp.addEventListener("change", () => {
+      const i = +inp.dataset.i, k = inp.dataset.k;
+      if (k === "start" || k === "end") {
+        const v = normTime(inp.value);
+        if (v == null) {
+          // 非法的時間：還原成原本的值並閃紅框提示
+          inp.value = inp.dataset.prev || "";
+          state.rows[i][k] = inp.value;
+          save();
+          inp.classList.add("invalid");
+          setTimeout(() => inp.classList.remove("invalid"), 900);
+          return;
+        }
+        inp.value = v;
+      }
+      state.rows[i][k] = inp.value;
+      save(); tick();
+    });
+    inp.addEventListener("input", () => {
+      const i = +inp.dataset.i, k = inp.dataset.k;
+      state.rows[i][k] = inp.value;
+      save();
+    });
+  });
+  tbody.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = +btn.dataset.i, act = btn.dataset.act;
+      if (act === "del") state.rows.splice(i, 1);
+      if (act === "up" && i > 0) [state.rows[i-1], state.rows[i]] = [state.rows[i], state.rows[i-1]];
+      if (act === "down" && i < state.rows.length - 1) [state.rows[i+1], state.rows[i]] = [state.rows[i], state.rows[i+1]];
+      save(); tick();
+    });
+  });
+}
+function escapeHtml(s) { return String(s ?? "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
+
+// ---------- 時鐘 + 狀態 ----------
+const WEEK = ["日","一","二","三","四","五","六"];
+function tick() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,"0"),
+        mm = String(now.getMinutes()).padStart(2,"0"),
+        ss = String(now.getSeconds()).padStart(2,"0");
+  $("clockTime").textContent = `${hh}:${mm}:${ss}`;
+  $("clockDate").textContent =
+    `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}（週${WEEK[now.getDay()]}）`;
+
+  // 考試日期
+  $("examDate").value = state.date || "";
+  const dLabel = state.date ? state.date.replaceAll("-", "/") : "—";
+
+  // 判斷每節狀態（只在考試當天才即時判斷；其他天顯示未開始/已過）
+  const todayLocal = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  const isExamDay = !state.date || state.date === todayLocal;
+  const nowMin = now.getHours()*60 + now.getMinutes();
+
+  const sorted = state.rows
+    .map((r, i) => ({ ...r, i, s: toMin(r.start), e: toMin(r.end) }))
+    .filter(r => r.s != null && r.e != null)
+    .sort((a,b) => a.s - b.s);
+
+  let statusMap = {}, current = null, next = null;
+  state.rows.forEach((_, i) => statusMap[i] = "wait");
+
+  if (sorted.length && isExamDay) {
+    for (const r of sorted) {
+      if (nowMin >= r.s && nowMin < r.e) { current = r; break; }
+    }
+    if (!current) {
+      for (const r of sorted) { if (nowMin < r.s) { next = r; break; } }
+    } else {
+      const idx = sorted.indexOf(current);
+      next = sorted[idx+1] || null;
+    }
+    sorted.forEach(r => {
+      if (r.e <= nowMin && r !== current) statusMap[r.i] = "done";
+    });
+    if (current) statusMap[current.i] = "now";
+    if (next) statusMap[next.i] = statusMap[next.i] === "done" ? "done" : "next";
+  } else if (sorted.length && !isExamDay) {
+    // 非考試當天：若日期已過全部 done，未來則全部 wait
+    if (state.date && state.date < todayLocal) sorted.forEach(r => statusMap[r.i] = "done");
+  }
+
+  // 只有資料或狀態變化、且使用者沒有正在表格內打字時，才重繪表格
+  const sig = JSON.stringify([state.rows, statusMap]);
+  if (sig !== lastTableSig && !tbody.contains(document.activeElement)) {
+    renderTable(statusMap);
+    lastTableSig = sig;
+  }
+
+  // 頂部狀態
+  const pill = $("statusPill");
+  if (!sorted.length) {
+    pill.textContent = "⏳ 準備中"; pill.className = "status-pill";
+  } else if (!isExamDay) {
+    pill.textContent = state.date < todayLocal ? "✅ 已結束" : "📅 " + dLabel;
+    pill.className = "status-pill";
+  } else if (current) {
+    pill.textContent = `🔴 ${current.subject || "考試中"} 考試中`;
+    pill.className = "status-pill exam";
+  } else if (next) {
+    pill.textContent = `🟢 休息中`;
+    pill.className = "status-pill break";
+  } else {
+    pill.textContent = "✅ 已結束"; pill.className = "status-pill";
+  }
+
+  // 全螢幕大字報（開啟時每秒更新）
+  if (boardOpen) renderBoard({ sorted, statusMap, current, next, isExamDay, dLabel, now, todayLocal });
+}
+
+// ---------- 全螢幕大字報 ----------
+let boardOpen = false;
+function openBoard() {
+  boardOpen = true;
+  $("board").classList.add("open");
+  document.body.style.overflow = "hidden";
+  const el = $("board");
+  if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  tick();
+}
+function closeBoard() {
+  if (!boardOpen) return;
+  boardOpen = false;
+  $("board").classList.remove("open");
+  document.body.style.overflow = "";
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+}
+function boardTagText(st) {
+  if (st === "now") return "考試中";
+  if (st === "next") return "下一節";
+  if (st === "done") return "已結束";
+  return "未開始";
+}
+function renderBoard(v) {
+  const { sorted, statusMap, current, next, isExamDay, dLabel, now, todayLocal } = v;
+  const WEEK2 = ["日","一","二","三","四","五","六"];
+  $("boardClock").textContent =
+    `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}:${String(now.getSeconds()).padStart(2,"0")}`;
+  $("boardDate").textContent =
+    `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,"0")}/${String(now.getDate()).padStart(2,"0")}（週${WEEK2[now.getDay()]}）・考試日期 ${dLabel}`;
+
+  const st = $("boardStatus");
+  st.className = "board-status";
+  if (!sorted.length) {
+    st.textContent = "⏳ 準備中";
+  } else if (!isExamDay) {
+    const past = state.date && state.date < todayLocal;
+    st.textContent = past ? "✅ 考試已結束" : "📅 " + dLabel;
+  } else if (current) {
+    st.textContent = `🔴 ${current.subject || "考試中"} 考試中`;
+    st.classList.add("exam");
+  } else if (next) {
+    st.textContent = "🟢 休息中";
+    st.classList.add("break");
+  } else {
+    st.textContent = "🎉 本日考試結束";
+  }
+
+  $("boardRows").innerHTML = sorted.length ? sorted.map(r => {
+    const s = statusMap[r.i] || "wait";
+    return `<div class="board-row ${s}">
+      <div class="b-session">${escapeHtml(r.session)}</div>
+      <div class="b-time">${r.start} – ${r.end}</div>
+      <div class="b-subject">${escapeHtml(r.subject) || "—"}</div>
+      <div class="b-tag">${boardTagText(s)}</div>
+    </div>`;
+  }).join("") : `<div class="board-empty">尚未設定考試節次</div>`;
+}
+
+// ---------- 事件 ----------
+$("addBtn").addEventListener("click", () => {
+  const n = state.rows.length + 1;
+  state.rows.push({ session: `第${n}節`, start: "", end: "", subject: "" });
+  save(); tick();
+  const last = tbody.querySelector("tr:last-child input.subject");
+  if (last) last.focus();
+});
+$("resetBtn").addEventListener("click", () => {
+  if (!confirm("確定恢復成範例課表嗎？目前的編輯會被覆蓋。")) return;
+  state = JSON.parse(JSON.stringify(DEFAULT_DATA));
+  save(); tick();
+});
+$("clearBtn").addEventListener("click", () => {
+  if (!confirm("確定清除全部節次嗎？")) return;
+  state.rows = []; save(); tick();
+});
+$("examDate").addEventListener("change", (e) => { state.date = e.target.value; save(); tick(); });
+// 離開表格欄位後再刷新一次（補上編輯期間延後的狀態更新）
+tbody.addEventListener("focusout", () => tick());
+// 全螢幕大字報
+$("boardBtn").addEventListener("click", openBoard);
+$("boardClose").addEventListener("click", closeBoard);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeBoard(); });
+
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>
